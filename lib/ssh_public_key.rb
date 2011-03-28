@@ -43,7 +43,9 @@ module SSHPublicKey
     end
 
     def blob
-      bytes = BlobWriter.new.write_string(sigil).write_bigint(e).write_bigint(m).to_s
+      bytes = BlobWriter.new.write_string(sigil).
+                             write_bigint(e).
+                             write_bigint(m).to_s
       [bytes].pack("m").tr("\n", "")
     end
 
