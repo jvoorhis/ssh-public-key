@@ -1,4 +1,6 @@
 require 'twos_complement'
+require 'ssh_public_key/blob_reader'
+require 'ssh_public_key/blob_writer'
 
 module SSHPublicKey
 
@@ -20,62 +22,6 @@ module SSHPublicKey
                                                 read_bigint.
                                                 read_bigint.values
       DSAPublicKey.new(:p => p, :q => q, :g => g, :y => y, :comment => comment)
-    end
-  end
-
-  class BlobReader
-    attr_reader :bytes, :pos, :values
-
-    def initialize(bytes, pos = 0, values = [])
-      @bytes  = bytes
-      @pos    = pos
-      @values = values
-    end
-
-    def read_string
-      int = read_int
-      size = int.values.last
-      value = bytes[int.pos, size].unpack("a*").first
-      BlobReader.new(bytes, int.pos + size, values + [value])
-    end
-
-    def read_int
-      size  = 4
-      value = bytes[pos, size].unpack("N").first
-      BlobReader.new(bytes, pos + size, values + [value])
-    end
-
-    def read_bigint
-      int   = read_int
-      size  = int.values.last
-      value = Integer.from_twos_complement(bytes[int.pos, size])
-      BlobReader.new(bytes, int.pos + size, values + [value])
-    end
-  end
-
-  class BlobWriter
-    attr_reader :bytes
-
-    def initialize(bytes = "")
-      @bytes = bytes
-    end
-
-    alias :to_s :bytes
-
-    def write_int(int)
-      BlobWriter.new(bytes + [int].pack("N"))
-    end
-
-    def write_string(string)
-      bytestring = [string].pack("a*")
-      BlobWriter.new(
-        write_int(bytestring.bytesize).bytes + bytestring)
-    end
-
-    def write_bigint(bigint)
-      bytestring = bigint.to_twos_complement
-      BlobWriter.new(
-        write_int(bytestring.bytesize).bytes + bytestring)
     end
   end
 
