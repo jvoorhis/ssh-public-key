@@ -31,6 +31,11 @@ DSA
     assert_equal RSAKEY_M, m
   end
 
+  def test_comment_rsa
+    key = SSHPublicKey.parse(RSAKEY)
+    assert_equal 'rsa@test', key.comment
+  end
+
   def test_algorithm_dsa
     key = SSHPublicKey.parse(DSAKEY)
     assert_equal 'DSA', key.algorithm
@@ -45,4 +50,10 @@ DSA
     assert_equal DSAKEY_G, g
     assert_equal DSAKEY_Y, y
   end
+
+  def test_comment_dsa
+    key = SSHPublicKey.parse(DSAKEY)
+    assert_equal 'dsa@test', key.comment
+  end
 end
+

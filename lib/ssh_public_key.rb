@@ -4,86 +4,81 @@ module SSHPublicKey
   module_function
 
   def parse(text)
+    plaintext_sigil, blob, comment = text.split(/\s/)
+    bytes = Base64.decode64(blob)
     case text
-    when /^ssh-rsa/ then RSAPublicKey.new(text)
-    when /^ssh-dss/ then DSAPublicKey.new(text)
+    when /^ssh-rsa/
+      sigil, e, m = BlobParser.parse(bytes, :string, :bigint, :bigint)
+      RSAPublicKey.new(:parameters => { 'e' => e, 'm' => m }, :comment => comment)
+    when /^ssh-dss/
+      sigil, p, q, g, y = BlobParser.parse(bytes, :string, :bigint, :bigint, :bigint, :bigint)
+      DSAPublicKey.new(:parameters => { 'p' => p, 'q' => q, 'g' => g, 'y' => y }, :comment => comment)
+    end
+  end
+
+  class BlobParser < Struct.new(:bytes, :pos, :value)
+    def self.parse(bytes, *fields)
+      values = []
+      initial_parser = BlobParser[bytes, 0, nil]
+      values, final_parser = fields.inject([values, initial_parser]) do |(values, parser), field|
+        parser.send(:"read_#{field}") do |parser|
+          [values + Array(parser.value), parser]
+        end
+      end
+      values
+    end
+
+    def read(type)
+      send(:"read_#{type}") { |parser| yield parser }
+    end
+
+    def read_string
+      read_int do |int|
+        size  = int.value
+        value = bytes[int.pos, size].unpack("a*").first
+        yield BlobParser[bytes, int.pos+size, value]
+      end
+    end
+
+    def read_int
+      size  = 4
+      value = bytes[pos, size].unpack("N").first
+      yield BlobParser[bytes, pos + size, value]
+    end
+
+    def read_bigint
+      read_int do |int|
+        size  = int.value
+        value = bytes[int.pos, size].unpack("c" + "C" * (size-1)).inject(0) { |i,b| (i << 8) | b }
+        yield BlobParser[bytes, int.pos + size, value]
+      end
     end
   end
 
   class PublicKey
-    attr_reader :parameters
+    private_class_method :new
 
-    protected
+    attr_reader :parameters, :comment
 
-    def decode_type
-      size = decode_int
-      @bytes[@pos, size].unpack("a*").first.tap do
-        @pos += size
-      end
-    end
-
-    def decode_int
-      size = 4
-      @bytes[@pos, size].unpack("N").first.tap do
-        @pos += size
-      end
-    end
-
-    def decode_bigint
-      size = decode_int
-      @bytes[@pos, size].unpack("c" + "C" * (size-1)).inject(0) { |i,b| (i << 8) | b }.tap do
-        @pos += size
-      end
+    def initialize(options = {})
+      @parameters = options[:parameters]
+      @comment    = options[:comment]
     end
   end
 
   class RSAPublicKey < PublicKey
-    def initialize(text)
-      @text = text
-      blob = text.split(/\s/).detect { |part| part =~ /^AAAA/ }
-      @bytes = Base64.decode64(blob)
-      @pos = 0
-      type_sigil = decode_type
-      type_sigil = 'ssh-rsa' or fail
-      @parameters = decode_parameters
-    end
+    public_class_method :new
 
     def algorithm
       'RSA'
     end
-
-    protected
-
-    def decode_parameters
-      e = decode_bigint
-      m = decode_bigint
-      { 'e' => e, 'm' => m }
-    end
   end
 
   class DSAPublicKey < PublicKey
-    def initialize(text)
-      @text = text
-      blob = text.split(/\s/).detect { |part| part =~ /^AAAA/ }
-      @bytes = Base64.decode64(blob)
-      @pos = 0
-      type_sigil = decode_type
-      type_sigil == 'ssh-dss' or fail
-      @parameters = decode_parameters
-    end
-    
+    public_class_method :new
+
     def algorithm
       'DSA'
-    end
-
-    protected
-
-    def decode_parameters
-      p = decode_bigint
-      q = decode_bigint
-      g = decode_bigint
-      y = decode_bigint
-      { 'p' => p, 'q' => q, 'g' => g, 'y' => y }
     end
   end
 end
